@@ -20,7 +20,6 @@ env\scripts\activate
 #%%
 msg = "Hello World"
 print(msg)
+%% [markdown]
 
-#%% [markdown]
-=======
 
