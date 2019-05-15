@@ -1,6 +1,6 @@
 # GroningenML
 
-This is is repository for the Kaggle competiton 'Titanic: Machine Learning from Disaster'
+This is the repository for the Kaggle competiton 'Titanic: Machine Learning from Disaster'
 https://www.kaggle.com/c/titanic
 
 ## Overview
