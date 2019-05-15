@@ -37,3 +37,12 @@ As pip installs globally this is not recommended.
 
 `pip install -r requirements.txt`
 
+## Data
+
+You can download the files manually or use [Kaggle API](https://github.com/Kaggle/kaggle-api)
+
+### Kaggle API
+
+Make sure you are in the `Data` directory.
+
+Run `kaggle competitions download -c titanic`
