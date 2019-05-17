@@ -1,0 +1,254 @@
+# GroningenML
+# Kaggle Titanic Competition
+
+
+# 17-05-2019
+# ToDo round 2 improvements:
+# Cabin (dropped)
+# Name (dropped)
+# Ticket (non-numerical only and check on 4 dropped NaN observations)
+# GridSearch
+
+
+# =============================================================================
+# Part 1 - Data Preparation
+# =============================================================================
+# Importing the libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Importing the dataset
+raw_csv_data_train = pd.read_csv('Data/train.csv', sep = ',')
+raw_csv_data_test = pd.read_csv('Data/test.csv', sep = ',')
+
+# Copy to DataFrame
+df_train = raw_csv_data_train.copy()
+df_test = raw_csv_data_test.copy()
+
+# Overview of dataset
+df = df_train
+df.head()
+df.info() #
+df.shape # (891, 12)
+df_summary = df.describe()
+features = pd.DataFrame(df.columns.values, columns = ['name'])
+features['type'] = df.dtypes.values
+
+
+# =============================================================================
+# Part 2 - Dataset cleaning (features, observations)
+# =============================================================================
+df = df_train.copy()
+## Drop non-relevant features
+df = df.drop(columns = ['PassengerId', 'Name'])
+
+## check op NaNs
+df.isnull().values.any() # 
+df.isna().any()
+df.isnull().sum() 
+#Age            177
+#Cabin          687
+#Embarked         2
+
+# Take median of Age
+median = df['Age'].median() # 28.0
+df['Age'].fillna(median, inplace=True)
+# Drop column Cabin
+df = df.drop(columns = ['Cabin'])
+df_test = df_test.drop(columns = ['Cabin']) # also drop column in test set
+# Delete observations with NaN in embarked (2 only)
+#df = df.dropna(subset = ['Embarked']) > needed in remove non-numerical characters in Ticket
+
+## Take care of objects 
+# Sex: LabelEncoder
+from sklearn.preprocessing import LabelEncoder
+df['Sex'] = LabelEncoder().fit_transform(df['Sex'])
+# Embarked: One Hot Encoding (including avoiding dummy variables trap)
+df = pd.get_dummies(df, columns=['Embarked'], prefix=["Embarked"], drop_first=True) 
+# Name: tbd
+# Ticket: remove non-numerical characters
+import re
+i = 0
+df_length = len(df)
+for i in range (0, df_length):
+    df.loc[i, 'Ticket'] = re.sub('[^0-9]','', df.loc[i, 'Ticket'])
+# > 4 tickets are empty
+df['Ticket'] = pd.to_numeric(df['Ticket'], errors='coerce')
+df.isnull().sum() 
+# Ticket 4 -> drop 4 observations with Ticket NaN
+df = df.dropna(subset = ['Ticket'])
+
+
+# =============================================================================
+# Part 3 - EDA
+# =============================================================================
+## Check distribution in target feature
+sns.countplot(df['Survived'], label = 'Count') 
+plt.savefig('output/feature_target_distribution.jpg')
+# > balance on Survived 
+
+## Correlation with Response Variable (linear)
+df2 = df.copy().drop(columns = ['Survived', 'Ticket']) # only on Numerical variables - not Categorical variables
+df2.corrwith(df.Survived).plot.bar(
+            figsize=(20,10), # correlation with response variable / barplot
+            title = 'Correlation with response variable',
+            fontsize = 10, rot = 45,
+            grid = True)
+plt.savefig('output/data_correlation_response.jpg')
+
+## Correlation Matrix between features (check independency between independent numerical features)
+df2 = df.copy().drop(columns = ['Survived']) # 
+sns.set(style="white", font_scale=1)
+# Compute the correlation matrix
+corr = df2.corr()
+# Generate a mask for the upper triangle (keep only lower end)
+mask = np.zeros_like(corr, dtype=np.bool)
+mask[np.triu_indices_from(mask)] = True
+# Set up the matplotlib figure
+f, ax = plt.subplots(figsize=(18, 15))
+f.suptitle("Correlation Matrix", fontsize = 40)
+# Generate a custom diverging colormap
+cmap = sns.diverging_palette(220, 10, as_cmap=True)
+# Draw the heatmap with the mask and correct aspect ratio
+sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
+            square=True, linewidths=.5, cbar_kws={"shrink": .5})
+plt.savefig('output/data_correlation_matrix.jpg')
+
+
+# =============================================================================
+# Part 4 - Preparation for modelling
+# =============================================================================
+X_train = df.drop(columns = ['Survived'])
+y_train = df['Survived']
+X_test = df.drop(columns = ['Survived'])
+y_test = df['Survived']
+
+## Balancing the Training Set
+# create lists of y_train = 1 and y_train = 0
+pos_indices = y_train[y_train.values == 1].index
+neg_indices = y_train[y_train.values == 0].index
+# determine higher (more observations) and lower (less) list
+if len(pos_indices) > len(neg_indices):
+    higher_list_indices = pos_indices
+    lower_list_indices = neg_indices
+else:
+    higher_list_indices = neg_indices
+    lower_list_indices = pos_indices  
+# update the higher list with the length of the lower list no. of observations
+import random
+random.seed(0)
+higher_list_indices = np.random.choice(higher_list_indices, size=len(lower_list_indices)) # subset
+lower_list_indices = np.asarray(lower_list_indices)
+new_indices = np.concatenate((lower_list_indices, higher_list_indices))
+# update X_train and y_train (balanced on y values)
+X_train = X_train.loc[new_indices,]
+y_train = y_train[new_indices]
+# check distrubution on y (should be equal now)
+y_train.value_counts()
+#1    342
+#0    342
+
+## importing the libraries
+import xgboost as xgb
+
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import classification_report
+
+
+# =============================================================================
+# Part 3 - MODEL1: Logistic Regression
+# =============================================================================
+from sklearn.linear_model import LogisticRegression
+classifier = LogisticRegression(random_state = 0, penalty = 'l1', solver = 'liblinear', multi_class = 'ovr')
+classifier.fit(X_train, y_train)
+# Predicting the Test set results
+y_pred = classifier.predict(X_test)
+
+## Result
+# Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+# Heatmap
+sns.heatmap(cm,annot=True,fmt="d")
+# Accuracy
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7756
+# Write to Model Selection
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred)
+rec = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+results = pd.DataFrame([['Logistic Regression', acc, prec, rec, f1]],
+               columns = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'])
+
+
+# =============================================================================
+# Part 3 - MODEL2: RandomForest
+# =============================================================================
+from sklearn.ensemble import RandomForestClassifier
+classifier = RandomForestClassifier(n_estimators = 100,
+                                    random_state = 0,
+                                    verbose = 4,
+                                    n_jobs = -1)
+classifier.fit(X_train, y_train)
+# Predicting the Test set results
+y_pred = classifier.predict(X_test)
+
+## Result
+# Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+# Heatmap
+sns.heatmap(cm,annot=True,fmt="d")
+# Accuracy
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.9154
+# Write to Model Selection
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred)
+rec = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+model_results = pd.DataFrame([['Random Forest (n=100)', acc, prec, rec, f1]],
+               columns = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'])
+results = results.append(model_results, ignore_index = True, sort = False)
+
+
+# =============================================================================
+# Part 3 - MODEL3: XGBoost Classifier
+# =============================================================================
+from xgboost import XGBClassifier
+classifier = XGBClassifier(max_depth = 10, learning_rate = 0.3, n_estimators = 400)
+classifier.fit(X_train, y_train)
+# Predicting the Test set results
+y_pred = classifier.predict(X_test)
+
+## Result
+# Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+# Heatmap version 1
+sns.heatmap(cm,annot=True,fmt="d")
+# Accuracy
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.9177
+# Determine features importance
+fig, ax = plt.subplots(figsize=(12,18))
+xgb.plot_importance(classifier, height=0.8, ax=ax)
+plt.show() # See XGBoost_feature_importance.png
+plt.savefig('output/feature_importance_XGBoost.jpg')
+# Write to Model Selection
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred)
+rec = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+model_results = pd.DataFrame([['XGBoost', acc, prec, rec, f1]],
+               columns = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'])
+results = results.append(model_results, ignore_index = True, sort = False)
+
+
+# =============================================================================
+# Write result to excel
+# =============================================================================
+results = results.sort_values(['Accuracy'], ascending = False)
+results.to_excel(r'output/results.xlsx', index = False)
+
