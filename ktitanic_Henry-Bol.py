@@ -2,11 +2,11 @@
 # Kaggle Titanic Competition
 
 
-# 17-05-2019
+# Round 1: 17-05-2019
 # ToDo round 2 improvements:
-# Cabin (dropped)
-# Name (dropped)
-# Ticket (non-numerical only and check on 4 dropped NaN observations)
+# Cabin (temp dropped)
+# Name (temp dropped)
+# Ticket (temp non-numerical only)
 # GridSearch
 
 
@@ -23,12 +23,12 @@ import seaborn as sns
 raw_csv_data_train = pd.read_csv('Data/train.csv', sep = ',')
 raw_csv_data_test = pd.read_csv('Data/test.csv', sep = ',')
 
-# Copy to DataFrame
-df_train = raw_csv_data_train.copy()
-df_test = raw_csv_data_test.copy()
+# Copy to DataFrame ((test and train))
+df_train = raw_csv_data_train.copy() # PassengerId 1 - 891
+df_test_after_modelling = raw_csv_data_test.copy() # PassengerId 892 - 1309
+df = df_train
 
 # Overview of dataset
-df = df_train
 df.head()
 df.info() #
 df.shape # (891, 12)
@@ -40,7 +40,6 @@ features['type'] = df.dtypes.values
 # =============================================================================
 # Part 2 - Dataset cleaning (features, observations)
 # =============================================================================
-df = df_train.copy()
 ## Drop non-relevant features
 df = df.drop(columns = ['PassengerId', 'Name'])
 
@@ -48,16 +47,12 @@ df = df.drop(columns = ['PassengerId', 'Name'])
 df.isnull().values.any() # 
 df.isna().any()
 df.isnull().sum() 
-#Age            177
-#Cabin          687
-#Embarked         2
 
 # Take median of Age
 median = df['Age'].median() # 28.0
 df['Age'].fillna(median, inplace=True)
 # Drop column Cabin
 df = df.drop(columns = ['Cabin'])
-df_test = df_test.drop(columns = ['Cabin']) # also drop column in test set
 # Delete observations with NaN in embarked (2 only)
 #df = df.dropna(subset = ['Embarked']) > needed in remove non-numerical characters in Ticket
 
@@ -67,14 +62,13 @@ from sklearn.preprocessing import LabelEncoder
 df['Sex'] = LabelEncoder().fit_transform(df['Sex'])
 # Embarked: One Hot Encoding (including avoiding dummy variables trap)
 df = pd.get_dummies(df, columns=['Embarked'], prefix=["Embarked"], drop_first=True) 
-# Name: tbd
-# Ticket: remove non-numerical characters
+## Ticket: remove non-numerical characters
 import re
 i = 0
 df_length = len(df)
 for i in range (0, df_length):
     df.loc[i, 'Ticket'] = re.sub('[^0-9]','', df.loc[i, 'Ticket'])
-# > 4 tickets are empty
+# change from object to int
 df['Ticket'] = pd.to_numeric(df['Ticket'], errors='coerce')
 df.isnull().sum() 
 # Ticket 4 -> drop 4 observations with Ticket NaN
@@ -90,7 +84,8 @@ plt.savefig('output/feature_target_distribution.jpg')
 # > balance on Survived 
 
 ## Correlation with Response Variable (linear)
-df2 = df.copy().drop(columns = ['Survived', 'Ticket']) # only on Numerical variables - not Categorical variables
+df2 = df.dropna(subset = ['Survived']) # check subset with Survival only (i.e Training set)
+df2 = df2.copy().drop(columns = ['Survived']) # correlation with feature target
 df2.corrwith(df.Survived).plot.bar(
             figsize=(20,10), # correlation with response variable / barplot
             title = 'Correlation with response variable',
@@ -99,7 +94,6 @@ df2.corrwith(df.Survived).plot.bar(
 plt.savefig('output/data_correlation_response.jpg')
 
 ## Correlation Matrix between features (check independency between independent numerical features)
-df2 = df.copy().drop(columns = ['Survived']) # 
 sns.set(style="white", font_scale=1)
 # Compute the correlation matrix
 corr = df2.corr()
@@ -120,10 +114,14 @@ plt.savefig('output/data_correlation_matrix.jpg')
 # =============================================================================
 # Part 4 - Preparation for modelling
 # =============================================================================
-X_train = df.drop(columns = ['Survived'])
-y_train = df['Survived']
-X_test = df.drop(columns = ['Survived'])
-y_test = df['Survived']
+X = df.drop(columns = ['Survived'])
+y = df['Survived']
+ 
+## Splitting the dataset into the Training set and Test set (this is not the test set for final validation)
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0, shuffle = True)
+## Splitting the Test dataset into the Train set and Validation set
+#X_train, X_validation, y_train, y_validation = train_test_split(X_train, y_train, test_size = 0.25, random_state = 0, shuffle = True)
 
 ## Balancing the Training Set
 # create lists of y_train = 1 and y_train = 0
@@ -147,18 +145,28 @@ X_train = X_train.loc[new_indices,]
 y_train = y_train[new_indices]
 # check distrubution on y (should be equal now)
 y_train.value_counts()
-#1    342
-#0    342
+#1    276
+#0    276
+
+## Feature Scaling (while keeping the column names and row indices)
+from sklearn.preprocessing import StandardScaler
+sc_X = StandardScaler()
+X_train2 = pd.DataFrame(sc_X.fit_transform(X_train))
+X_test2 = pd.DataFrame(sc_X.transform(X_test))
+X_train2.columns = X_train.columns.values # column names toevoegen
+X_test2.columns = X_test.columns.values 
+X_train2.index = X_train.index.values # juiste row indices toevoegen
+X_test2.index = X_test.index.values
+X_train = X_train2
+X_test = X_test2
 
 ## importing the libraries
 import xgboost as xgb
-
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
-from sklearn.metrics import classification_report
 
 
 # =============================================================================
@@ -176,7 +184,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7756
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7697
 # Write to Model Selection
 acc = accuracy_score(y_test, y_pred)
 prec = precision_score(y_test, y_pred)
@@ -204,7 +212,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.9154
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7978
 # Write to Model Selection
 acc = accuracy_score(y_test, y_pred)
 prec = precision_score(y_test, y_pred)
@@ -230,7 +238,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap version 1
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.9177
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7697
 # Determine features importance
 fig, ax = plt.subplots(figsize=(12,18))
 xgb.plot_importance(classifier, height=0.8, ax=ax)
