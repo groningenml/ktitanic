@@ -9,6 +9,8 @@
 # Ticket (temp non-numerical only)
 # GridSearch
 
+# check update van Fork naar GroningenML
+
 # =============================================================================
 # Part 1 - Data Preparation
 # =============================================================================
