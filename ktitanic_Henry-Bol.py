@@ -9,8 +9,6 @@
 # Ticket (temp non-numerical only)
 # GridSearch
 
-# aanpassing om verschil tussen Master en Develop te zien
-
 # =============================================================================
 # Part 1 - Data Preparation
 # =============================================================================
