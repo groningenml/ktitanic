@@ -2,12 +2,19 @@
 # Kaggle Titanic Competition
 
 
-# Round 1: 17-05-2019
-# ToDo round 2 improvements:
-# Cabin (temp dropped)
-# Name (temp dropped)
-# Ticket (temp non-numerical only)
-# GridSearch
+# Round 3: 23-05-2019
+# Result: III 0.8771 (II 0.8268 I 0.7978)
+# Exclude Balancing: 
+# Logistic Regression: 0.8212
+# Random Forest: 0.8659
+# XGBoost: 0.8771 (default hyperparameters)
+#
+# ToDo Round 4:
+# Cabin: check non-numerical (categorical?)
+# Name: (temp dropped)
+# Ticket: check relation
+# GridSearch (especially improve on XGBoost)
+# Relations: Ticket, Name, SibSp, Parch, Cabin
 
 # =============================================================================
 # Part 1 - Data Preparation
@@ -34,6 +41,19 @@ df.shape # (891, 12)
 df_summary = df.describe()
 features = pd.DataFrame(df.columns.values, columns = ['name'])
 features['type'] = df.dtypes.values
+features['rows #'] = df.count().values # non-NaNs rows
+features['NaN #'] = df.isnull().sum().values
+features['unique #'] = df.nunique().values
+features = features.sort_values(['name'])
+
+## Create workbook (and sort df on feature names alphabetically)
+workbook = pd.ExcelWriter('output/workbook_xxx.xlsx', engine='xlsxwriter')
+df_summary.to_excel(workbook, sheet_name='Summary numerical features', header=True, index=True)
+df = df[sorted(df)] # sort to make it possible to work with the same index
+df.to_excel(workbook, sheet_name='Raw data - sorted column names', header=True, index=True)
+features.to_excel(workbook, sheet_name='Features', header=True, index=False)
+workbook.save()
+workbook.close()
 
 
 # =============================================================================
@@ -47,13 +67,26 @@ df.isnull().values.any() #
 df.isna().any()
 df.isnull().sum() 
 
-# Take median of Age
+## Age NaNs: take median
 median = df['Age'].median() # 28.0
 df['Age'].fillna(median, inplace=True)
-# Drop column Cabin
+
+## Cabin: add feature Cabin_bin yes (1) or no (0) and drop Cabin
+df['Cabin'].fillna(0, inplace=True) # Change NaN to 0
+df['Cabin_bin'] = df['Cabin']
+for i in range (df.shape[0]):
+    if df.Cabin_bin[i] != 0:
+        df.Cabin_bin[i] = 1
 df = df.drop(columns = ['Cabin'])
-# Delete observations with NaN in embarked (2 only)
-#df = df.dropna(subset = ['Embarked']) > needed in remove non-numerical characters in Ticket
+df['Cabin_bin'] = df['Cabin_bin'].astype(int)
+
+## Embarked: add feature Embarked_bin yes (1) or no (0)
+df['Embarked'].fillna(0, inplace=True) # Change NaN to 0
+df['Embarked_bin'] = df['Embarked']
+for i in range (df.shape[0]):
+    if df.Embarked_bin[i] != 0:
+        df.Embarked_bin[i] = 1
+df['Embarked_bin'] = df['Embarked_bin'].astype(int)
 
 ## Take care of objects 
 # Sex: LabelEncoder
@@ -61,6 +94,7 @@ from sklearn.preprocessing import LabelEncoder
 df['Sex'] = LabelEncoder().fit_transform(df['Sex'])
 # Embarked: One Hot Encoding (including avoiding dummy variables trap)
 df = pd.get_dummies(df, columns=['Embarked'], prefix=["Embarked"], drop_first=True) 
+
 ## Ticket: remove non-numerical characters
 import re
 i = 0
@@ -70,8 +104,9 @@ for i in range (0, df_length):
 # change from object to int
 df['Ticket'] = pd.to_numeric(df['Ticket'], errors='coerce')
 df.isnull().sum() 
-# Ticket 4 -> drop 4 observations with Ticket NaN
-df = df.dropna(subset = ['Ticket'])
+# Ticket 4 -> 4 observations with Ticket NaN
+#df = df.dropna(subset = ['Ticket'])
+df['Ticket'].fillna(0, inplace=True) # Change NaN to 0
 
 
 # =============================================================================
@@ -122,30 +157,30 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, rando
 ## Splitting the Test dataset into the Train set and Validation set
 #X_train, X_validation, y_train, y_validation = train_test_split(X_train, y_train, test_size = 0.25, random_state = 0, shuffle = True)
 
-## Balancing the Training Set
-# create lists of y_train = 1 and y_train = 0
-pos_indices = y_train[y_train.values == 1].index
-neg_indices = y_train[y_train.values == 0].index
-# determine higher (more observations) and lower (less) list
-if len(pos_indices) > len(neg_indices):
-    higher_list_indices = pos_indices
-    lower_list_indices = neg_indices
-else:
-    higher_list_indices = neg_indices
-    lower_list_indices = pos_indices  
-# update the higher list with the length of the lower list no. of observations
-import random
-random.seed(0)
-higher_list_indices = np.random.choice(higher_list_indices, size=len(lower_list_indices)) # subset
-lower_list_indices = np.asarray(lower_list_indices)
-new_indices = np.concatenate((lower_list_indices, higher_list_indices))
-# update X_train and y_train (balanced on y values)
-X_train = X_train.loc[new_indices,]
-y_train = y_train[new_indices]
-# check distrubution on y (should be equal now)
-y_train.value_counts()
-#1    276
-#0    276
+### Balancing the Training Set (do not activate -> lower performance)
+## create lists of y_train = 1 and y_train = 0
+#pos_indices = y_train[y_train.values == 1].index
+#neg_indices = y_train[y_train.values == 0].index
+## determine higher (more observations) and lower (less) list
+#if len(pos_indices) > len(neg_indices):
+#    higher_list_indices = pos_indices
+#    lower_list_indices = neg_indices
+#else:
+#    higher_list_indices = neg_indices
+#    lower_list_indices = pos_indices  
+## update the higher list with the length of the lower list no. of observations
+#import random
+#random.seed(0)
+#higher_list_indices = np.random.choice(higher_list_indices, size=len(lower_list_indices)) # subset
+#lower_list_indices = np.asarray(lower_list_indices)
+#new_indices = np.concatenate((lower_list_indices, higher_list_indices))
+## update X_train and y_train (balanced on y values)
+#X_train = X_train.loc[new_indices,]
+#y_train = y_train[new_indices]
+## check distrubution on y (should be equal now)
+#y_train.value_counts()
+##1    273
+##0    273
 
 ## Feature Scaling (while keeping the column names and row indices)
 from sklearn.preprocessing import StandardScaler
@@ -183,7 +218,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7697
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: I: 0.7697 / II: 0.8045 / III: 0.8212
 # Write to Model Selection
 acc = accuracy_score(y_test, y_pred)
 prec = precision_score(y_test, y_pred)
@@ -194,7 +229,7 @@ results = pd.DataFrame([['Logistic Regression', acc, prec, rec, f1]],
 
 
 # =============================================================================
-# Part 3 - MODEL2: RandomForest
+# Part 3 - MODEL2: Random Forest
 # =============================================================================
 from sklearn.ensemble import RandomForestClassifier
 classifier = RandomForestClassifier(n_estimators = 100,
@@ -211,7 +246,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7978
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: I: 0.7978 / II: 0.8268 / III: 0.8659
 # Write to Model Selection
 acc = accuracy_score(y_test, y_pred)
 prec = precision_score(y_test, y_pred)
@@ -226,7 +261,8 @@ results = results.append(model_results, ignore_index = True, sort = False)
 # Part 3 - MODEL3: XGBoost Classifier
 # =============================================================================
 from xgboost import XGBClassifier
-classifier = XGBClassifier(max_depth = 10, learning_rate = 0.3, n_estimators = 400)
+#classifier = XGBClassifier(max_depth = 10, learning_rate = 0.3, n_estimators = 400)
+classifier = XGBClassifier()
 classifier.fit(X_train, y_train)
 # Predicting the Test set results
 y_pred = classifier.predict(X_test)
@@ -237,7 +273,7 @@ cm = confusion_matrix(y_test, y_pred)
 # Heatmap version 1
 sns.heatmap(cm,annot=True,fmt="d")
 # Accuracy
-print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: 0.7697
+print("Test Data Accuracy: %0.4f" % accuracy_score(y_test, y_pred)) # Test Data Accuracy: I: 0.7697 / II: 0.7765 / III: 0.8771
 # Determine features importance
 fig, ax = plt.subplots(figsize=(12,18))
 xgb.plot_importance(classifier, height=0.8, ax=ax)
@@ -254,8 +290,9 @@ results = results.append(model_results, ignore_index = True, sort = False)
 
 
 # =============================================================================
-# Write result to excel
+# Write result to excel and csv
 # =============================================================================
 results = results.sort_values(['Accuracy'], ascending = False)
-results.to_excel(r'output/results.xlsx', index = False)
+results.to_excel(r'output/results220519a.xlsx', index = False)
+results.to_csv(r'output/results.csv', index = False)
 
