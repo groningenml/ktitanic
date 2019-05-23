@@ -3,11 +3,11 @@
 
 
 # Round 3: 23-05-2019
-# Result: III 0.8771 (II 0.8268 ( 0.7978)
+# Result: III 0.8771 (II 0.8268 I 0.7978)
 # Exclude Balancing: 
 # Logistic Regression: 0.8212
 # Random Forest: 0.8659
-# XGBoost: 0.8771 (without setting the hyperparameters)
+# XGBoost: 0.8771 (default hyperparameters)
 #
 # ToDo Round 4:
 # Cabin: check non-numerical (categorical?)
